@@ -1,26 +1,50 @@
-import json
-import glob
-import os
+name: 批量更新 title
 
-# ========== 配置区域 ==========
-NEW_TITLE = "https://你的新地址.com/?c=xxx"   # ← 改成你想要的新 title
-FILE_PATTERN = "config/a*.json"              # 指向 config 文件夹
-# =============================
+on:
+  workflow_dispatch:   # 手动触发
 
-for filepath in glob.glob(FILE_PATTERN):
-    try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        if "data" in data and "title" in data["data"]:
-            old = data["data"]["title"]
-            data["data"]["title"] = NEW_TITLE
-            print(f"已修改: {filepath}  |  旧值: {old}")
-        
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-            
-    except Exception as e:
-        print(f"处理失败 {filepath}: {e}")
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
 
-print("\n全部处理完成！")
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 运行更新脚本
+        run: |
+          python -c '
+          import json, glob, os
+
+          NEW_TITLE = "https://你的新地址.com/?c=xxx"   # ← 请改成你要的新 title
+          FILE_PATTERN = "config/a*.json"
+
+          for filepath in glob.glob(FILE_PATTERN):
+              try:
+                  with open(filepath, "r", encoding="utf-8") as f:
+                      data = json.load(f)
+                  
+                  if "data" in data and "title" in data["data"]:
+                      old = data["data"]["title"]
+                      data["data"]["title"] = NEW_TITLE
+                      print(f"已修改: {filepath}  |  旧值: {old}")
+                  
+                  with open(filepath, "w", encoding="utf-8") as f:
+                      json.dump(data, f, ensure_ascii=False, indent=2)
+              except Exception as e:
+                  print(f"处理失败 {filepath}: {e}")
+
+          print("\n全部处理完成！")
+          '
+
+      - name: 提交并推送修改
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add config/a*.json
+          git diff --staged --quiet || git commit -m "批量更新 config 下的 title 字段"
+          git push
