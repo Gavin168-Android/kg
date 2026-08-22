@@ -1,0 +1,84 @@
+name: 批量生成 config JSON
+
+on:
+  workflow_dispatch:   # 手动触发
+    inputs:
+      start:
+        description: '起始编号（含），例如 1'
+        required: true
+        default: '1'
+      end:
+        description: '结束编号（含），例如 200'
+        required: true
+        default: '200'
+      width:
+        description: '编号位数（默认 2，即 xm01；超过范围自动升级为 3 位）'
+        required: false
+        default: '2'
+      title:
+        description: '生成的 data.title 内容'
+        required: false
+        default: 'welcome'
+      shorts:
+        description: '生成的 data.short 列表，逗号分隔，例如 A,B,C'
+        required: false
+        default: 'A,B,C'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 生成 JSON 文件
+        run: |
+          python -c '
+          import json, os, glob
+
+          START   = int("${{ inputs.start }}")
+          END     = int("${{ inputs.end }}")
+          WIDTH   = int("${{ inputs.width }}")
+          TITLE   = "${{ inputs.title }}"
+          SHORTS  = [s.strip() for s in "${{ inputs.shorts }}".split(",") if s.strip()]
+
+          def name_of(n):
+              w = WIDTH
+              # 若超过当前位数能表示的最大值，自动加位数，避免与现有 xm100 等冲突
+              if n > 10 ** w - 1:
+                  w = len(str(n))
+              return f"xm{n:0{w}d}.json"
+
+          os.makedirs("config", exist_ok=True)
+          created, skipped = [], []
+          for i in range(START, END + 1):
+              fn = name_of(i)
+              path = os.path.join("config", fn)
+              # 若已存在同名文件，绝不覆盖，仅跳过
+              if os.path.isfile(path):
+                  print(f"跳过(已存在，不覆盖): {fn}")
+                  skipped.append(fn)
+                  continue
+              payload = {"data": {"title": TITLE, "short": SHORTS}}
+              with open(path, "w", encoding="utf-8") as f:
+                  json.dump(payload, f, ensure_ascii=False, indent=2)
+              print(f"已新建: {fn}")
+              created.append(fn)
+
+          print("本次新增:", created if created else "无")
+          print("本次跳过(已存在):", skipped if skipped else "无")
+          print("全部处理完成！")
+          '
+
+      - name: 提交并推送修改
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add config/xm*.json
+          git diff --staged --quiet || git commit -m "批量生成 config 下的 JSON 文件 (start=${{ inputs.start }}, end=${{ inputs.end }})"
+          git push
