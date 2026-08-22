@@ -21,7 +21,7 @@ jobs:
           import json, glob, os
 
           NEW_TITLE = "https://你的新地址.com/?c=xxx"   # ← 请改成你要的新 title
-          FILE_PATTERN = "config/a*.json"
+          FILE_PATTERN = "config/xm*.json"
 
           for filepath in glob.glob(FILE_PATTERN):
               try:
