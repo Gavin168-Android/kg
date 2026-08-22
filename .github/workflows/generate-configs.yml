@@ -27,6 +27,8 @@ on:
 jobs:
   generate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # 允许 GITHUB_TOKEN 推送改动回仓库
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
@@ -80,5 +82,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add config/xm*.json
-          git diff --staged --quiet || git commit -m "批量生成 config 下的 JSON 文件 (start=${{ inputs.start }}, end=${{ inputs.end }})"
+          # 仅当有实际变更时才提交；无变更则跳过提交与推送
+          if git diff --staged --quiet; then
+            echo "没有需要提交的变更，跳过。"
+            exit 0
+          fi
+          git commit -m "批量生成 config 下的 JSON 文件 (start=${{ inputs.start }}, end=${{ inputs.end }})"
+          git pull --rebase --autostash || true
           git push
