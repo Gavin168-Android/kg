@@ -11,6 +11,14 @@ on:
         description: '新的 data.short 列表，逗号分隔，例如 A,B,C（留空则不更新 short）'
         required: false
         default: ''
+      start:
+        description: '起始文件序号（含），例如 1 表示仅处理 xm1.json 及之后的文件（留空则从头开始）'
+        required: false
+        default: ''
+      end:
+        description: '结束文件序号（含），例如 10 表示仅处理到 xm10.json（留空则到末尾）'
+        required: false
+        default: ''
 
 jobs:
   update:
@@ -29,13 +37,43 @@ jobs:
       - name: 运行更新脚本
         run: |
           python -c '
-          import json, glob, os
+          import json, glob, os, re
 
           NEW_TITLE = "${{ inputs.title }}"
           NEW_SHORTS = [s.strip() for s in "${{ inputs.shorts }}".split(",") if s.strip()] if "${{ inputs.shorts }}" else []
           FILE_PATTERN = "config/xm*.json"
 
-          for filepath in glob.glob(FILE_PATTERN):
+          def to_int_or_none(v):
+              v = (v or "").strip()
+              if not v:
+                  return None
+              try:
+                  return int(v)
+              except ValueError:
+                  print(f"警告：start/end 不是合法整数，已忽略: {v!r}")
+                  return None
+
+          START = to_int_or_none("${{ inputs.start }}")
+          END = to_int_or_none("${{ inputs.end }}")
+
+          def file_index(fp):
+              m = re.search(r"xm(\d+)\.json$", fp)
+              return int(m.group(1)) if m else None
+
+          matched = glob.glob(FILE_PATTERN)
+          # 按文件序号排序，便于阅读输出；无法解析序号的排到最后
+          matched.sort(key=lambda fp: (file_index(fp) is None, file_index(fp) if file_index(fp) is not None else 0))
+
+          for filepath in matched:
+              idx = file_index(filepath)
+              if idx is None:
+                  print(f"跳过（文件名不符合 xm<数字>.json）: {filepath}")
+                  continue
+              if START is not None and idx < START:
+                  continue
+              if END is not None and idx > END:
+                  continue
+
               try:
                   with open(filepath, "r", encoding="utf-8") as f:
                       data = json.load(f)
@@ -55,11 +93,11 @@ jobs:
                   if changed:
                       with open(filepath, "w", encoding="utf-8") as f:
                           json.dump(data, f, ensure_ascii=False, indent=2)
-                      print(f"已修改: {filepath}  |  " + "; ".join(changed))
+                      print(f"[{idx}] 已修改: {filepath}  |  " + "; ".join(changed))
                   else:
-                      print(f"无变更: {filepath}")
+                      print(f"[{idx}] 无变更: {filepath}")
               except Exception as e:
-                  print(f"处理失败 {filepath}: {e}")
+                  print(f"[{idx}] 处理失败 {filepath}: {e}")
 
           print("\n全部处理完成！")
           '
